@@ -139,25 +139,19 @@ async function startServer() {
     return res.status(400).json({ ok: false, error: 'Data is required' });
   });
 
-  // Vite development middleware or static production serving
+  // Vite development middleware or static production serving (Multi-Page Application)
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: 'spa',
+      appType: 'custom',
     });
     app.use(vite.middlewares);
 
-    // Explicit handler for SPA entry points and fallback in dev mode
-    const renderDevIndex = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
-      if (req.originalUrl.startsWith('/api')) {
-        return next();
-      }
-
+    const renderPage = (htmlFileName: string) => async (req: express.Request, res: express.Response, next: express.NextFunction) => {
       try {
-        const url = req.originalUrl || req.url;
-        const indexPath = path.resolve(process.cwd(), 'index.html');
-        let template = fs.readFileSync(indexPath, 'utf-8');
-        template = await vite.transformIndexHtml(url, template);
+        const filePath = path.resolve(process.cwd(), htmlFileName);
+        let template = fs.readFileSync(filePath, 'utf-8');
+        template = await vite.transformIndexHtml(req.originalUrl || req.url, template);
         res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
       } catch (e) {
         vite.ssrFixStacktrace(e as Error);
@@ -165,17 +159,31 @@ async function startServer() {
       }
     };
 
-    app.get(['/login', '/login/*', '/admin', '/admin/*'], renderDevIndex);
-    app.use(renderDevIndex);
+    app.get(['/login', '/login.html', '/admin/login'], renderPage('login.html'));
+    app.get(['/admin', '/admin.html', '/admin/dashboard'], renderPage('admin.html'));
+    app.get(['/', '/index.html'], renderPage('index.html'));
+    app.use((req, res, next) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return next();
+      }
+      renderPage('index.html')(req, res, next);
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    const sendProdIndex = (req: express.Request, res: express.Response) => {
+
+    app.get(['/login', '/login.html', '/admin/login'], (req, res) => {
+      res.sendFile(path.join(distPath, 'login.html'));
+    });
+    app.get(['/admin', '/admin.html', '/admin/dashboard'], (req, res) => {
+      res.sendFile(path.join(distPath, 'admin.html'));
+    });
+    app.get(['/', '/index.html'], (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
-    };
-    app.get(['/', '/login', '/login/*', '/admin', '/admin/*'], sendProdIndex);
-    app.get('*', sendProdIndex);
-    app.use(sendProdIndex);
+    });
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
