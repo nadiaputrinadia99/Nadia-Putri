@@ -1,0 +1,6 @@
+{
+  "name": "Website Portofolio Pribadi",
+  "description": "Website portofolio pribadi serba guna dan minimalis dengan halaman publik dan dashboard admin terproteksi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
