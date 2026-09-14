@@ -72,6 +72,64 @@ async function startServer() {
     });
   });
 
+  // Server-side Supabase Auth Proxy (bypasses browser adblockers/CORS/network issues)
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      if (!email || !password) {
+        return res.status(400).json({ success: false, error: 'Email dan password wajib diisi.' });
+      }
+
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const anonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+      if (!supabaseUrl || !anonKey) {
+        return res.json({
+          success: true,
+          mode: 'local',
+          message: 'Supabase belum dikonfigurasi, login lokal diizinkan.',
+        });
+      }
+
+      const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          apikey: anonKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        const rawMsg = data?.msg || data?.error_description || '';
+        let msg = rawMsg;
+        if (
+          data?.error_code === 'invalid_credentials' ||
+          rawMsg.toLowerCase().includes('invalid login credentials') ||
+          data?.error === 'invalid_grant'
+        ) {
+          msg = 'Email atau password salah. Pastikan akun telah dibuat di Supabase (menu Authentication > Users).';
+        } else if (!msg) {
+          msg = 'Gagal autentikasi dengan Supabase.';
+        }
+        return res.status(response.status).json({ success: false, error: msg });
+      }
+
+      return res.json({
+        success: true,
+        session: data,
+      });
+    } catch (err: any) {
+      console.error('Auth login proxy error:', err);
+      return res.status(500).json({
+        success: false,
+        error: `Koneksi ke Supabase gagal: ${err?.message || 'Gagal menghubungi server'}`,
+      });
+    }
+  });
+
   app.post('/api/portfolio', (req, res) => {
     const { data } = req.body;
     if (data) {
