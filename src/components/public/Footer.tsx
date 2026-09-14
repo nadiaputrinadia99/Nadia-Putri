@@ -1,12 +1,13 @@
 import React from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Lock } from 'lucide-react';
 import { Profile } from '../../types';
 
 interface FooterProps {
   profile: Profile;
+  onNavigateAdmin?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ profile }) => {
+export const Footer: React.FC<FooterProps> = ({ profile, onNavigateAdmin }) => {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -18,9 +19,26 @@ export const Footer: React.FC<FooterProps> = ({ profile }) => {
           <p className="text-sm font-medium text-zinc-800">
             © {new Date().getFullYear()} {profile.name}. Seluruh hak cipta dilindungi.
           </p>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Website Portofolio Pribadi — Dirancang secara profesional, minimalis, dan elegan.
-          </p>
+          <div className="flex items-center gap-3 mt-1 text-xs text-zinc-500">
+            <span>Website Portofolio Pribadi</span>
+            {onNavigateAdmin && (
+              <>
+                <span className="text-zinc-300">•</span>
+                <a
+                  href="/login"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigateAdmin();
+                  }}
+                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-blue-600 transition-colors"
+                  title="Akses Login Admin"
+                >
+                  <Lock className="w-3 h-3" />
+                  <span>Admin Portal</span>
+                </a>
+              </>
+            )}
+          </div>
         </div>
 
         <button

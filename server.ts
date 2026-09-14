@@ -147,15 +147,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
 
-    // SPA fallback: render index.html for all non-API GET routes (e.g. /admin, /admin/login)
-    app.use('*', async (req, res, next) => {
-      // Don't intercept API routes
+    // Explicit handler for SPA entry points and fallback in dev mode
+    const renderDevIndex = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
       if (req.originalUrl.startsWith('/api')) {
         return next();
       }
 
       try {
-        const url = req.originalUrl;
+        const url = req.originalUrl || req.url;
         const indexPath = path.resolve(process.cwd(), 'index.html');
         let template = fs.readFileSync(indexPath, 'utf-8');
         template = await vite.transformIndexHtml(url, template);
@@ -164,13 +163,19 @@ async function startServer() {
         vite.ssrFixStacktrace(e as Error);
         next(e);
       }
-    });
+    };
+
+    app.get(['/login', '/login/*', '/admin', '/admin/*'], renderDevIndex);
+    app.use(renderDevIndex);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    const sendProdIndex = (req: express.Request, res: express.Response) => {
       res.sendFile(path.join(distPath, 'index.html'));
-    });
+    };
+    app.get(['/', '/login', '/login/*', '/admin', '/admin/*'], sendProdIndex);
+    app.get('*', sendProdIndex);
+    app.use(sendProdIndex);
   }
 
   app.listen(PORT, '0.0.0.0', () => {

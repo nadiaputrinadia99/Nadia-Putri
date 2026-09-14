@@ -1,16 +1,6 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
 import { PortfolioData } from './types';
-import {
-  getPortfolioData,
-  savePortfolioData,
-  getAdminSession,
-  setAdminSession,
-} from './lib/storage';
+import { getPortfolioData, savePortfolioData, getAdminSession } from './lib/storage';
 
 // Public Components
 import { Navbar } from './components/public/Navbar';
@@ -27,14 +17,53 @@ import { Footer } from './components/public/Footer';
 import { AdminLogin } from './components/admin/AdminLogin';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 
+// Helper to determine route across pathname, hash, and search query params
+function getAppPath(): string {
+  if (typeof window === 'undefined') return '/';
+
+  // 1. Pathname check (e.g. /login, /admin, /admin/login, /admin/dashboard)
+  const pathname = (window.location.pathname || '/').toLowerCase().replace(/\/+$/, '') || '/';
+  if (
+    pathname.startsWith('/admin') ||
+    pathname === '/login' ||
+    pathname.startsWith('/login/')
+  ) {
+    return pathname;
+  }
+
+  // 2. Hash routing check (e.g. #/login, #login, #/admin, #admin)
+  const hash = (window.location.hash || '').toLowerCase().replace(/^#\/?/, '').replace(/\/+$/, '');
+  if (
+    hash === 'login' ||
+    hash.startsWith('login/') ||
+    hash === 'admin' ||
+    hash.startsWith('admin/')
+  ) {
+    return '/' + hash;
+  }
+
+  // 3. Search query check (e.g. ?login, ?admin, ?page=login, ?route=admin)
+  try {
+    const search = new URLSearchParams(window.location.search);
+    const pageParam = search.get('page') || search.get('route') || search.get('p');
+    if (pageParam) {
+      const clean = pageParam.toLowerCase().replace(/^\/+/, '').replace(/\/+$/, '');
+      if (clean.startsWith('admin') || clean.startsWith('login')) {
+        return '/' + clean;
+      }
+    }
+    if (search.has('login')) return '/login';
+    if (search.has('admin')) return '/admin';
+  } catch {
+    // URLSearchParams fallback safe
+  }
+
+  return pathname;
+}
+
 export default function App() {
   const [portfolioData, setPortfolioData] = useState<PortfolioData>(getPortfolioData());
-  const [currentPath, setCurrentPath] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return window.location.pathname || '/';
-    }
-    return '/';
-  });
+  const [currentPath, setCurrentPath] = useState<string>(() => getAppPath());
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(getAdminSession());
 
   // Initialize and listen for changes
@@ -51,20 +80,23 @@ export default function App() {
       setIsAuthenticated(getAdminSession());
     };
 
-    const handlePopState = () => {
-      const path = window.location.pathname || '/';
-      setCurrentPath(path);
+    const handleLocationChange = () => {
+      setCurrentPath(getAppPath());
     };
 
     window.addEventListener('portfolio_updated', handlePortfolioUpdate);
     window.addEventListener('admin_session_changed', handleSessionChange);
-    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
 
-    // Keyboard shortcut for reviewer/testing in iframe: Ctrl+Shift+A or Alt+A to go to /login or /admin
+    // Keyboard shortcut for testing/reviewing: Ctrl+Shift+A or Alt+A to toggle admin
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.altKey && e.key.toLowerCase() === 'a')) {
+      if (
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') ||
+        (e.altKey && e.key.toLowerCase() === 'a')
+      ) {
         e.preventDefault();
-        navigateTo('/admin');
+        navigateTo(isAuthenticated ? '/admin/dashboard' : '/login');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -72,10 +104,11 @@ export default function App() {
     return () => {
       window.removeEventListener('portfolio_updated', handlePortfolioUpdate);
       window.removeEventListener('admin_session_changed', handleSessionChange);
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // PRD 5: Dynamic Document Title format "{nama} | Personal Portfolio Website"
   useEffect(() => {
@@ -96,7 +129,12 @@ export default function App() {
     try {
       window.history.pushState({}, '', path);
     } catch {
-      // In sandboxed iframes pushState might be restricted
+      // In sandboxed iframes pushState might be restricted, fallback to hash
+      try {
+        window.location.hash = path;
+      } catch {
+        // Safe fallback
+      }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -156,7 +194,7 @@ export default function App() {
       ) : (
         /* Halaman Publik (PRD Bagian 4) */
         <div className="flex-1 flex flex-col">
-          {/* Navbar Publik (PRD 4.8: TANPA link/tombol admin) */}
+          {/* Navbar Publik */}
           <Navbar profile={portfolioData.profile} />
 
           {/* Hero Section (PRD 4.1) */}
@@ -180,8 +218,11 @@ export default function App() {
           {/* Kontak (PRD 4.7) */}
           <ContactSection contacts={portfolioData.contacts} />
 
-          {/* Footer (PRD 4.8: TANPA link/tombol admin) */}
-          <Footer profile={portfolioData.profile} />
+          {/* Footer dengan link Admin Portal tersembunyi/rapi */}
+          <Footer
+            profile={portfolioData.profile}
+            onNavigateAdmin={() => navigateTo(isAuthenticated ? '/admin/dashboard' : '/login')}
+          />
         </div>
       )}
     </div>
